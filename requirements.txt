@@ -36,3 +36,6 @@ langchain-chroma
 
 # Google Gemini Integrations
 langchain-google-genai
+
+# Sparse Retrieval
+rank_bm25

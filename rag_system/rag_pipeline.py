@@ -33,7 +33,7 @@ class RAGPipeline:
         self.parser = OutputFormatter.get_parser()
         self.chain = self.prompt | self.llm | self.parser
 
-    def answer(self, question: str, retrieval_mode: str = "top_k") -> tuple[str, float, list]:
+    def answer(self, question: str, retrieval_mode: str = "top_k", metadata_filter: dict = None) -> tuple[str, float, list]:
         """
         Runs the RAG pipeline.
         Returns:
@@ -50,11 +50,13 @@ class RAGPipeline:
         if self.retriever_service.should_refuse(scored_results):
             return "I don't have enough information in the provided documents.", best_score, []
 
-        # 3. Choose retrieval mode (MMR vs Standard Top-k)
+        # 3. Choose retrieval mode (MMR vs Standard Top-k vs Hybrid)
         if retrieval_mode == "mmr":
-            retrieved_docs = self.retriever_service.retrieve_mmr(question)
+            retrieved_docs = self.retriever_service.retrieve_mmr(question, metadata_filter=metadata_filter)
+        elif retrieval_mode == "hybrid":
+            retrieved_docs = self.retriever_service.retrieve_hybrid(question, metadata_filter=metadata_filter)
         else:
-            retrieved_docs = self.retriever_service.retrieve_top_k(question)
+            retrieved_docs = self.retriever_service.retrieve_top_k(question, metadata_filter=metadata_filter)
 
         # 4. Format context
         context = OutputFormatter.format_docs(retrieved_docs)

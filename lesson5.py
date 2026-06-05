@@ -95,6 +95,8 @@ def main():
         fetch_k=FETCH_K,
         refuse_threshold=REFUSE_THRESHOLD
     )
+    # Enable Hybrid (Sparse + Dense) Search with our text chunks
+    retriever_service.enable_hybrid_search(chunks)
 
     # ============================================================
     # 9. Create RAG Pipeline
@@ -110,9 +112,13 @@ def main():
     print("- Type your question normally")
     print("- Type 'mode top_k' to use normal top-k retrieval")
     print("- Type 'mode mmr' to use MMR retrieval")
+    print("- Type 'mode hybrid' to use Hybrid (BM25 + Chroma) retrieval")
+    print("- Type 'filter public' to filter documents with access_level='public'")
+    print("- Type 'filter clear' to remove metadata filters")
     print("- Type 'exit' to quit\n")
 
     retrieval_mode = "top_k"
+    current_filter = None
 
     while True:
         try:
@@ -138,13 +144,33 @@ def main():
             print("Retrieval mode changed to: mmr\n")
             continue
 
+        if user_input.lower() == "mode hybrid":
+            retrieval_mode = "hybrid"
+            print("Retrieval mode changed to: hybrid\n")
+            continue
+
+        if user_input.lower() == "filter public":
+            current_filter = {"access_level": "public"}
+            print("Metadata filter applied: {'access_level': 'public'}\n")
+            continue
+
+        if user_input.lower() == "filter clear":
+            current_filter = None
+            print("Metadata filter cleared.\n")
+            continue
+
         print("\n====================================================")
         print(f"Question: {user_input}")
         print(f"Retrieval mode: {retrieval_mode}")
+        print(f"Metadata filter: {current_filter}")
         print("====================================================")
 
         # Run pipeline
-        final_answer, best_score, retrieved_docs = pipeline.answer(user_input, retrieval_mode=retrieval_mode)
+        final_answer, best_score, retrieved_docs = pipeline.answer(
+            user_input, 
+            retrieval_mode=retrieval_mode,
+            metadata_filter=current_filter
+        )
 
         print(f"\nBest relevance score: {best_score:.4f}")
 
