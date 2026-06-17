@@ -87,11 +87,28 @@ class RetrieverService:
         )
         return ensemble_retriever.invoke(query)
 
-    def retrieve_with_scores(self, query: str) -> list[tuple[Document, float]]:
-        """Retrieves documents along with their relevance scores."""
+    def retrieve_with_role(self, query: str, user_role: str = "student", retrieval_mode: str = "top_k") -> list[Document]:
+        """Filters retrieved documents based on the user's role-based access level."""
+        if user_role == "student":
+            metadata_filter = {"access_level": "student_visible"}
+        else:
+            metadata_filter = None  # Admins can access everything
+
+        if retrieval_mode == "mmr":
+            return self.retrieve_mmr(query, metadata_filter=metadata_filter)
+        elif retrieval_mode == "hybrid":
+            return self.retrieve_hybrid(query, metadata_filter=metadata_filter)
+        else:
+            return self.retrieve_top_k(query, metadata_filter=metadata_filter)
+
+    def retrieve_with_scores(self, query: str, metadata_filter: dict = None) -> list[tuple[Document, float]]:
+        """Retrieves documents along with their relevance scores, supporting metadata filtering."""
+        search_kwargs = {"k": self.top_k}
+        if metadata_filter:
+            search_kwargs["filter"] = metadata_filter
         return self.vector_store.similarity_search_with_relevance_scores(
             query=query,
-            k=self.top_k
+            **search_kwargs
         )
 
     def should_refuse(self, scored_results: list[tuple[Document, float]]) -> bool:

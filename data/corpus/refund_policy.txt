@@ -1,0 +1,3 @@
+Refund requests are reviewed manually by the support team.
+If a teacher misses a session, the student may receive a replacement session or refund after admin review.
+Refunds are not automatic and must be approved by the support team.

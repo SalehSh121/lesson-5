@@ -1,0 +1,3 @@
+Students can cancel a session up to 24 hours before the session starts.
+If a student misses a session without cancelling in advance, the session is counted as used.
+Teachers must join the session at least 5 minutes before the scheduled time.

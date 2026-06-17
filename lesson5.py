@@ -21,14 +21,9 @@ load_dotenv()
 # ============================================================
 # 2. Configuration
 # ============================================================
-# Since lesson5.py runs from the 'lesson 5' folder or parent folder,
-# we need to ensure the document path points to the correct location.
-# In the original file, it was: DOCUMENT_PATH = "company_policy.txt"
-# If company_policy.txt is in the lectures root, let's first check if it is in the same directory, 
-# otherwise search one directory up to be robust.
-DOCUMENT_PATH = "company_policy.txt"
-if not os.path.exists(DOCUMENT_PATH) and os.path.exists("../company_policy.txt"):
-    DOCUMENT_PATH = "../company_policy.txt"
+CORPUS_DIR = "./data/corpus"
+if not os.path.exists(CORPUS_DIR) and os.path.exists("data/corpus"):
+    CORPUS_DIR = "data/corpus"
 
 CHROMA_DIR = "./chroma_policy_db"
 
@@ -48,15 +43,11 @@ REBUILD_VECTOR_STORE = True
 
 def main():
     # ============================================================
-    # 3. Load Document & Metadata Tagging
+    # 3. Load Corpus & Dynamic Metadata Tagging
     # ============================================================
-    print(f"Loading document from: {DOCUMENT_PATH}")
-    loader = DocumentLoader(DOCUMENT_PATH)
-    documents_with_metadata = loader.load_with_metadata(
-        document_type="policy",
-        department="support",
-        access_level="public"
-    )
+    print(f"Loading corpus documents from: {CORPUS_DIR}")
+    loader = DocumentLoader()
+    documents_with_metadata = loader.load_corpus(CORPUS_DIR)
 
     # ============================================================
     # 4. Split Document into Chunks
@@ -107,22 +98,25 @@ def main():
     # ============================================================
     # 10. Interactive Loop
     # ============================================================
-    print("\n--- Optimized RAG Demo (Refactored) ---")
+    print("\n--- Advanced RAG Strategies Demo ---")
     print("Commands:")
     print("- Type your question normally")
-    print("- Type 'mode top_k' to use normal top-k retrieval")
-    print("- Type 'mode mmr' to use MMR retrieval")
-    print("- Type 'mode hybrid' to use Hybrid (BM25 + Chroma) retrieval")
-    print("- Type 'filter public' to filter documents with access_level='public'")
-    print("- Type 'filter clear' to remove metadata filters")
+    print("- Type 'mode top_k' to use standard similarity search")
+    print("- Type 'mode mmr' to use Maximal Marginal Relevance (diversity)")
+    print("- Type 'mode hybrid' to use Hybrid (BM25 + Chroma) search")
+    print("- Type 'role student' to set user role to student (restricted access)")
+    print("- Type 'role admin' to set user role to admin (full access)")
+    print("- Type 'rerank on' to enable keyword re-ranking")
+    print("- Type 'rerank off' to disable keyword re-ranking")
     print("- Type 'exit' to quit\n")
 
     retrieval_mode = "top_k"
-    current_filter = None
+    user_role = "student"
+    use_reranking = False
 
     while True:
         try:
-            user_input = input("Ask a question: ").strip()
+            user_input = input(f"[{user_role}][rerank={use_reranking}][{retrieval_mode}] Ask: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nGoodbye.")
             break
@@ -149,27 +143,39 @@ def main():
             print("Retrieval mode changed to: hybrid\n")
             continue
 
-        if user_input.lower() == "filter public":
-            current_filter = {"access_level": "public"}
-            print("Metadata filter applied: {'access_level': 'public'}\n")
+        if user_input.lower() == "role student":
+            user_role = "student"
+            print("User role set to: student (restricted access)\n")
             continue
 
-        if user_input.lower() == "filter clear":
-            current_filter = None
-            print("Metadata filter cleared.\n")
+        if user_input.lower() == "role admin":
+            user_role = "admin"
+            print("User role set to: admin (full access)\n")
+            continue
+
+        if user_input.lower() == "rerank on":
+            use_reranking = True
+            print("Re-ranking enabled.\n")
+            continue
+
+        if user_input.lower() == "rerank off":
+            use_reranking = False
+            print("Re-ranking disabled.\n")
             continue
 
         print("\n====================================================")
         print(f"Question: {user_input}")
         print(f"Retrieval mode: {retrieval_mode}")
-        print(f"Metadata filter: {current_filter}")
+        print(f"User Role: {user_role}")
+        print(f"Reranking Active: {use_reranking}")
         print("====================================================")
 
         # Run pipeline
         final_answer, best_score, retrieved_docs = pipeline.answer(
-            user_input, 
+            question=user_input, 
             retrieval_mode=retrieval_mode,
-            metadata_filter=current_filter
+            user_role=user_role,
+            use_reranking=use_reranking
         )
 
         print(f"\nBest relevance score: {best_score:.4f}")
@@ -178,9 +184,14 @@ def main():
         if not retrieved_docs:
             print("\n=== Refuse Threshold Triggered or No Context Found ===")
         else:
-            context = OutputFormatter.format_docs(retrieved_docs)
-            print("\n=== Retrieved Context ===")
-            print(context)
+            print("\n=== Retrieved Context & Sources ===")
+            for i, doc in enumerate(retrieved_docs, start=1):
+                source = doc.metadata.get("source", "unknown")
+                topic = doc.metadata.get("topic", "unknown")
+                access_level = doc.metadata.get("access_level", "unknown")
+                chunk_index = doc.metadata.get("chunk_index", "unknown")
+                print(f"[{i}] File: {source} | Topic: {topic} | Access: {access_level} | Chunk: {chunk_index}")
+                print(f"    Content: {doc.page_content.strip()}")
 
         print("\n=== Final Answer ===")
         print(final_answer)

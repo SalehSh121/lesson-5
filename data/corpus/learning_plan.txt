@@ -1,0 +1,3 @@
+Beginner Python students should start with variables, data types, conditions, loops, and simple functions.
+Students who struggle with loops should practice visual tracing, repetition exercises, and pattern-printing problems.
+Students preparing for interviews should practice problem solving, debugging, clean code, and explaining their thinking clearly.
