@@ -21,18 +21,21 @@ class RetrieverService:
         self.dense_weight = dense_weight
         self.has_hybrid = True
 
-    def retrieve_top_k(self, query: str, metadata_filter: dict = None) -> list[Document]:
-        """Retrieves documents using standard similarity search, with optional metadata filtering."""
+    def retrieve_top_k(self, query: str, metadata_filter: dict = None, min_date: str = None) -> list[Document]:
+        """Retrieves documents using standard similarity search, with optional metadata and date filtering."""
         search_kwargs = {"k": self.top_k}
         if metadata_filter:
             search_kwargs["filter"] = metadata_filter
         retriever = self.vector_store.as_retriever(
             search_kwargs=search_kwargs
         )
-        return retriever.invoke(query)
+        docs = retriever.invoke(query)
+        if min_date:
+            docs = [d for d in docs if d.metadata.get("last_updated", "0000-00-00") >= min_date]
+        return docs
 
-    def retrieve_mmr(self, query: str, metadata_filter: dict = None) -> list[Document]:
-        """Retrieves documents using Maximal Marginal Relevance, with optional metadata filtering."""
+    def retrieve_mmr(self, query: str, metadata_filter: dict = None, min_date: str = None) -> list[Document]:
+        """Retrieves documents using Maximal Marginal Relevance, with optional metadata and date filtering."""
         search_kwargs = {
             "k": self.top_k,
             "fetch_k": self.fetch_k
@@ -43,10 +46,13 @@ class RetrieverService:
             search_type="mmr",
             search_kwargs=search_kwargs
         )
-        return retriever.invoke(query)
+        docs = retriever.invoke(query)
+        if min_date:
+            docs = [d for d in docs if d.metadata.get("last_updated", "0000-00-00") >= min_date]
+        return docs
 
-    def retrieve_hybrid(self, query: str, metadata_filter: dict = None) -> list[Document]:
-        """Retrieves documents using hybrid (sparse BM25 + dense Chroma) search with metadata filtering."""
+    def retrieve_hybrid(self, query: str, metadata_filter: dict = None, min_date: str = None) -> list[Document]:
+        """Retrieves documents using hybrid (sparse BM25 + dense Chroma) search with metadata and date filtering."""
         if not self.has_hybrid:
             raise ValueError("Hybrid search is not enabled. Call enable_hybrid_search(chunks) first.")
 
@@ -59,12 +65,13 @@ class RetrieverService:
             except ImportError:
                 from langchain_community.retrievers import EnsembleRetriever
 
-        # Filter chunks for sparse search if metadata filter is provided
+        # Filter chunks for sparse search if metadata/date filter is provided
         filtered_chunks = self.all_chunks
-        if metadata_filter:
+        if metadata_filter or min_date:
             filtered_chunks = [
                 c for c in self.all_chunks
-                if all(c.metadata.get(k) == v for k, v in metadata_filter.items())
+                if (not metadata_filter or all(c.metadata.get(k) == v for k, v in metadata_filter.items())) and
+                   (not min_date or c.metadata.get("last_updated", "0000-00-00") >= min_date)
             ]
 
         if not filtered_chunks:
@@ -85,31 +92,37 @@ class RetrieverService:
             retrievers=[bm25_retriever, dense_retriever],
             weights=[self.sparse_weight, self.dense_weight]
         )
-        return ensemble_retriever.invoke(query)
+        docs = ensemble_retriever.invoke(query)
+        if min_date:
+            docs = [d for d in docs if d.metadata.get("last_updated", "0000-00-00") >= min_date]
+        return docs
 
-    def retrieve_with_role(self, query: str, user_role: str = "student", retrieval_mode: str = "top_k") -> list[Document]:
-        """Filters retrieved documents based on the user's role-based access level."""
+    def retrieve_with_role(self, query: str, user_role: str = "student", retrieval_mode: str = "top_k", min_date: str = None) -> list[Document]:
+        """Filters retrieved documents based on the user's role-based access level and min_date."""
         if user_role == "student":
             metadata_filter = {"access_level": "student_visible"}
         else:
             metadata_filter = None  # Admins can access everything
 
         if retrieval_mode == "mmr":
-            return self.retrieve_mmr(query, metadata_filter=metadata_filter)
+            return self.retrieve_mmr(query, metadata_filter=metadata_filter, min_date=min_date)
         elif retrieval_mode == "hybrid":
-            return self.retrieve_hybrid(query, metadata_filter=metadata_filter)
+            return self.retrieve_hybrid(query, metadata_filter=metadata_filter, min_date=min_date)
         else:
-            return self.retrieve_top_k(query, metadata_filter=metadata_filter)
+            return self.retrieve_top_k(query, metadata_filter=metadata_filter, min_date=min_date)
 
-    def retrieve_with_scores(self, query: str, metadata_filter: dict = None) -> list[tuple[Document, float]]:
-        """Retrieves documents along with their relevance scores, supporting metadata filtering."""
+    def retrieve_with_scores(self, query: str, metadata_filter: dict = None, min_date: str = None) -> list[tuple[Document, float]]:
+        """Retrieves documents along with their relevance scores, supporting metadata and date filtering."""
         search_kwargs = {"k": self.top_k}
         if metadata_filter:
             search_kwargs["filter"] = metadata_filter
-        return self.vector_store.similarity_search_with_relevance_scores(
+        results = self.vector_store.similarity_search_with_relevance_scores(
             query=query,
             **search_kwargs
         )
+        if min_date:
+            results = [(doc, score) for doc, score in results if doc.metadata.get("last_updated", "0000-00-00") >= min_date]
+        return results
 
     def should_refuse(self, scored_results: list[tuple[Document, float]]) -> bool:
         """Checks if the highest retrieved score falls below the refuse threshold."""

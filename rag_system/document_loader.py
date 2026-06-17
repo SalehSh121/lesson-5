@@ -41,21 +41,25 @@ class DocumentLoader:
             topic = "refund"
             document_type = "policy"
             access_level = "admin_visible"
+            last_updated = "2025-08-15"
         elif "learning" in filename:
             topic = "learning"
             document_type = "learning_plan"
             access_level = "student_visible"
+            last_updated = "2026-06-01"
         else:
             topic = "general_policy"
             document_type = "policy"
             access_level = "student_visible"
+            last_updated = "2026-06-15"
 
         return {
             "source": file_path.name,
             "topic": topic,
             "document_type": document_type,
             "access_level": access_level,
-            "department": "support"
+            "department": "support",
+            "last_updated": last_updated
         }
 
     def load_corpus(self, directory_path: str) -> list[Document]:

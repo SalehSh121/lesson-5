@@ -108,15 +108,18 @@ def main():
     print("- Type 'role admin' to set user role to admin (full access)")
     print("- Type 'rerank on' to enable keyword re-ranking")
     print("- Type 'rerank off' to disable keyword re-ranking")
+    print("- Type 'filter date YYYY-MM-DD' to filter by update date")
+    print("- Type 'filter date clear' to clear date filter")
     print("- Type 'exit' to quit\n")
 
     retrieval_mode = "top_k"
     user_role = "student"
     use_reranking = False
+    min_date = None
 
     while True:
         try:
-            user_input = input(f"[{user_role}][rerank={use_reranking}][{retrieval_mode}] Ask: ").strip()
+            user_input = input(f"[{user_role}][date>={min_date}][rerank={use_reranking}][{retrieval_mode}] Ask: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nGoodbye.")
             break
@@ -163,11 +166,22 @@ def main():
             print("Re-ranking disabled.\n")
             continue
 
+        if user_input.lower().startswith("filter date "):
+            date_val = user_input[12:].strip()
+            if date_val.lower() == "clear":
+                min_date = None
+                print("Temporal filter date cleared.\n")
+            else:
+                min_date = date_val
+                print(f"Temporal filter date set to: {min_date}\n")
+            continue
+
         print("\n====================================================")
         print(f"Question: {user_input}")
         print(f"Retrieval mode: {retrieval_mode}")
         print(f"User Role: {user_role}")
         print(f"Reranking Active: {use_reranking}")
+        print(f"Date Filter (last_updated >=): {min_date}")
         print("====================================================")
 
         # Run pipeline
@@ -175,7 +189,8 @@ def main():
             question=user_input, 
             retrieval_mode=retrieval_mode,
             user_role=user_role,
-            use_reranking=use_reranking
+            use_reranking=use_reranking,
+            min_date=min_date
         )
 
         print(f"\nBest relevance score: {best_score:.4f}")
@@ -190,7 +205,8 @@ def main():
                 topic = doc.metadata.get("topic", "unknown")
                 access_level = doc.metadata.get("access_level", "unknown")
                 chunk_index = doc.metadata.get("chunk_index", "unknown")
-                print(f"[{i}] File: {source} | Topic: {topic} | Access: {access_level} | Chunk: {chunk_index}")
+                last_updated = doc.metadata.get("last_updated", "unknown")
+                print(f"[{i}] File: {source} (Updated: {last_updated}) | Topic: {topic} | Access: {access_level} | Chunk: {chunk_index}")
                 print(f"    Content: {doc.page_content.strip()}")
 
         print("\n=== Final Answer ===")

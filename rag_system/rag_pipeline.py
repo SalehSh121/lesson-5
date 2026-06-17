@@ -35,7 +35,7 @@ class RAGPipeline:
         self.chain = self.prompt | self.llm | self.parser
         self.reranker = reranker_service or RerankerService(top_n=2)  # Re-ranks and selects top 2
 
-    def answer(self, question: str, retrieval_mode: str = "top_k", user_role: str = "student", use_reranking: bool = False) -> tuple[str, float, list]:
+    def answer(self, question: str, retrieval_mode: str = "top_k", user_role: str = "student", use_reranking: bool = False, min_date: str = None) -> tuple[str, float, list]:
         """
         Runs the RAG pipeline.
         Returns:
@@ -48,7 +48,7 @@ class RAGPipeline:
             metadata_filter = None  # Admins can access all files
 
         # 1. Similarity search with relevance scores to check refuse threshold
-        scored_results = self.retriever_service.retrieve_with_scores(question, metadata_filter=metadata_filter)
+        scored_results = self.retriever_service.retrieve_with_scores(question, metadata_filter=metadata_filter, min_date=min_date)
         if not scored_results:
             return "I don't have enough information in the provided documents.", 0.0, []
 
@@ -60,11 +60,11 @@ class RAGPipeline:
 
         # 3. Retrieve chunks using selected search strategy
         if retrieval_mode == "mmr":
-            retrieved_docs = self.retriever_service.retrieve_mmr(question, metadata_filter=metadata_filter)
+            retrieved_docs = self.retriever_service.retrieve_mmr(question, metadata_filter=metadata_filter, min_date=min_date)
         elif retrieval_mode == "hybrid":
-            retrieved_docs = self.retriever_service.retrieve_hybrid(question, metadata_filter=metadata_filter)
+            retrieved_docs = self.retriever_service.retrieve_hybrid(question, metadata_filter=metadata_filter, min_date=min_date)
         else:
-            retrieved_docs = self.retriever_service.retrieve_top_k(question, metadata_filter=metadata_filter)
+            retrieved_docs = self.retriever_service.retrieve_top_k(question, metadata_filter=metadata_filter, min_date=min_date)
 
         # 4. Optional: Rerank step
         if use_reranking and retrieved_docs:
