@@ -1,6 +1,6 @@
-from pathlib import Path
-from langchain_community.document_loaders import TextLoader
-from langchain_core.documents import Document
+from pathlib import Path # this is a standard library module used for filesystem path manipulations
+from langchain_community.document_loaders import TextLoader # this is a community loader, not part of the core langchain package ,it's used to load text files from disk
+from langchain_core.documents import Document # this is the core Document class from langchain_core, used to represent documents with content and metadata
 
 class DocumentLoader:
     """Component to handle document loading from disk and folder corpora."""
@@ -12,8 +12,8 @@ class DocumentLoader:
         """Loads document content and returns a list of Documents."""
         if not self.file_path:
             raise ValueError("No file_path specified for single document loading.")
-        loader = TextLoader(self.file_path, encoding="utf-8")
-        return loader.load()
+        loader = TextLoader(self.file_path, encoding="utf-8") # here we instantiate the TextLoader with the provided file path and specify UTF-8 encoding
+        return loader.load() # this calls the load method of TextLoader, which reads the file and returns a list of Document objects
 
     def load_with_metadata(self, document_type: str = "policy", department: str = "support", access_level: str = "public") -> list[Document]:
         """Loads document and tags each Document with configured default metadata."""
@@ -61,16 +61,16 @@ class DocumentLoader:
     def load_corpus(self, directory_path: str) -> list[Document]:
         """Loads all txt documents from a directory and assigns metadata based on filename."""
         all_documents = []
-        dir_path = Path(directory_path)
+        dir_path = Path(directory_path) # here we create a Path object for the directory path
         
         if not dir_path.exists() or not dir_path.is_dir():
             raise FileNotFoundError(f"Corpus directory not found: {directory_path}")
 
         for file_path in dir_path.glob("*.txt"):
-            loader = TextLoader(str(file_path), encoding="utf-8")
-            loaded_docs = loader.load()
-            metadata = self.infer_metadata_from_filename(file_path)
-
+            loader = TextLoader(str(file_path), encoding="utf-8") # here we instantiate the TextLoader for each text file found in the directory, specifying UTF-8 encoding
+            loaded_docs = loader.load() # this calls the load method of TextLoader, which reads the file and returns a list of Document objects
+            metadata = self.infer_metadata_from_filename(file_path) # this calls the infer_metadata_from_filename method to generate metadata based on the filename structure
+            # below we append each loaded document to the all_documents list, wrapping it in a new Document object that includes the inferred metadata
             for doc in loaded_docs:
                 all_documents.append(
                     Document(
