@@ -11,6 +11,10 @@ Example: User says "Show me open issues in langchain"
 - Returns issues to user
 
 Key: LLM decides which GitHub tool to use based on user request.
+install the below 
+
+pip install mcp PyGithub python-dotenv langchain-google-genai
+
 """
 
 import asyncio
