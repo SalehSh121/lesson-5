@@ -18,14 +18,22 @@ Setup:
 
 import asyncio
 import os
+import sys
 from dotenv import load_dotenv
 from mcp.server import Server
+from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
-from github import Github
+from mcp.server import InitializationOptions
+from github import Github, Auth
 from github.GithubException import GithubException
 
 
 load_dotenv()
+
+# Redirect print to stderr to avoid interfering with MCP protocol on stdout
+def log(msg):
+    """Print to stderr instead of stdout for MCP compatibility."""
+    print(msg, file=sys.stderr)
 
 # ============================================================
 # 1. Create MCP Server
@@ -40,11 +48,12 @@ server = Server("github-mcp-server") # this creates an MCP server instance with 
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 if not GITHUB_TOKEN:
-    print("Warning: GITHUB_TOKEN not set. Set it to use real GitHub API.")
-    print("Export: export GITHUB_TOKEN=your_token_here")
+    log("Warning: GITHUB_TOKEN not set. Set it to use real GitHub API.")
+    log("Export: export GITHUB_TOKEN=your_token_here")
     g = None
 else:
-    g = Github(GITHUB_TOKEN) # this initializes the GitHub client using the provided token. The client will be used to interact with the GitHub API for various operations like listing repositories, getting issues, creating issues, etc.
+    # Use new Auth.Token() method to avoid deprecation warning
+    g = Github(auth=Auth.Token(GITHUB_TOKEN)) # this initializes the GitHub client using the provided token. The client will be used to interact with the GitHub API for various operations like listing repositories, getting issues, creating issues, etc.
 
 
 # ============================================================
@@ -261,37 +270,42 @@ async def call_tool(name: str, arguments: dict):
 # ============================================================
 
 async def main():
-    print("Starting GitHub MCP server...")
+    log("Starting GitHub MCP server...")
     
     if not GITHUB_TOKEN:
-        print("\n⚠️  Warning: GITHUB_TOKEN not configured!")
-        print("Please set: export GITHUB_TOKEN=your_github_token")
+        log("\n⚠️  Warning: GITHUB_TOKEN not configured!")
+        log("Please set: export GITHUB_TOKEN=your_github_token")
     else:
         try:
             user = g.get_user()
-            print(f"\n✓ GitHub authenticated as: {user.login}")
+            log(f"\n✓ GitHub authenticated as: {user.login}")
         except Exception as e:
-            print(f"\n✗ GitHub authentication failed: {str(e)}")
+            log(f"\n✗ GitHub authentication failed: {str(e)}")
     
-    print("\nWaiting for client connections...")
+    log("\nStarting MCP server on stdio...")
     
-    async with server.stdio():
-        print("✓ GitHub MCP Server ready")
-        await asyncio.Event().wait()
+    async with stdio_server() as (read, write):
+        # Create initialization options with required fields
+        init_options = InitializationOptions(
+            server_name="github-mcp-server",
+            server_version="1.0.0",
+            capabilities={}
+        )
+        await server.run(read, write, init_options)
 
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("GitHub MCP Server")
-    print("="*60)
-    print("\nAvailable GitHub tools:")
-    print("- list_repositories(): List your GitHub repos")
-    print("- get_issues(repo_name, state): Get issues from repo")
-    print("- create_issue(repo_name, title, body): Create issue")
-    print("- get_repo_info(repo_name): Get repo details")
-    print("\nSetup:")
-    print("1. pip install PyGithub")
-    print("2. export GITHUB_TOKEN=your_token_here")
-    print("3. Run this server\n")
+    log("\n" + "="*60)
+    log("GitHub MCP Server")
+    log("="*60)
+    log("\nAvailable GitHub tools:")
+    log("- list_repositories(): List your GitHub repos")
+    log("- get_issues(repo_name, state): Get issues from repo")
+    log("- create_issue(repo_name, title, body): Create issue")
+    log("- get_repo_info(repo_name): Get repo details")
+    log("\nSetup:")
+    log("1. pip install PyGithub")
+    log("2. export GITHUB_TOKEN=your_token_here")
+    log("3. Run this server\n")
     
     asyncio.run(main())

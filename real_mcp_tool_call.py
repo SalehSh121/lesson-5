@@ -18,6 +18,7 @@ pip install mcp PyGithub python-dotenv langchain-google-genai
 """
 
 import asyncio
+import sys
 from dotenv import load_dotenv
 
 from mcp import ClientSession, StdioServerParameters
@@ -171,10 +172,13 @@ async def main():
     # Connect to external MCP server (GitHub)
     # ========================================================
     
+    # Use the virtual environment Python to start the server
+    python_exe = sys.executable
+    
     # This command starts the GitHub MCP server
     server_params = StdioServerParameters(
-        command="python",
-        args=["external_mcp_server.py"]
+        command=python_exe,
+        args=["github_mcp_server.py"]
     )
     
     try:
