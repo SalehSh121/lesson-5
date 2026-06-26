@@ -1,0 +1,339 @@
+from dotenv import load_dotenv
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+
+
+# ============================================================
+# 1. Load API key
+# ============================================================
+
+load_dotenv()
+
+
+# ============================================================
+# 2. Create LLMs
+# ============================================================
+
+router_llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.1
+)
+
+answer_llm = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.2
+)
+
+
+# ============================================================
+# 3. Define tool functions
+# ============================================================
+
+def calculator(expression: str) -> str:
+    """
+    Simple calculator tool.
+
+    WARNING:
+    This is for teaching only.
+    In production, do not use eval directly.
+    """
+    try:
+        allowed_chars = "0123456789+-*/(). "
+
+        if any(char not in allowed_chars for char in expression):
+            return "Invalid expression."
+
+        result = eval(expression)
+        return str(result)
+
+    except Exception as error:
+        return f"Calculation error: {error}"
+
+
+def policy_search(question: str) -> str:
+    """
+    Simulated policy search tool.
+    In a real system, this could call a RAG retriever.
+    """
+    policy_text = """
+Students can cancel a session up to 24 hours before the session starts.
+
+If a student misses a session without cancelling in advance, the session is counted as used.
+
+Refund requests are reviewed manually by the support team.
+
+If a teacher misses a session, the student may receive a replacement session or refund after admin review.
+"""
+    return policy_text
+
+
+def general_answer(question: str) -> str:
+    """
+    General answer tool.
+    """
+    prompt = ChatPromptTemplate.from_template("""
+You are a helpful teaching assistant.
+
+Answer the question clearly and briefly.
+
+Question:
+{question}
+""")
+
+    parser = StrOutputParser()
+    chain = prompt | answer_llm | parser
+
+    return chain.invoke({"question": question})
+
+
+# ============================================================
+# 4. Define tool schemas
+# ============================================================
+# The schema describes each tool.
+# The function actually executes the tool.
+
+TOOLS = {
+    "calculator": {
+        "name": "calculator",
+        "description": "Performs basic arithmetic calculations such as addition, subtraction, multiplication, division, and percentages.",
+        "parameters": {
+            "expression": "string - a safe arithmetic expression, for example: '150 * 0.8'"
+        },
+        "output_format": "string containing the calculated result",
+        "limitations": [
+            "Only arithmetic expressions are allowed.",
+            "Do not use for non-math questions.",
+            "This teaching example uses eval with strict character filtering; production systems should use a safer math parser."
+        ],
+        "safety_requirements": [
+            "Validate that the expression contains only allowed characters.",
+            "Reject expressions containing letters or unsafe symbols."
+        ],
+        "requires_approval": False,
+        "type": "read"
+    },
+
+    "policy_search": {
+        "name": "policy_search",
+        "description": "Searches the education platform policy text for questions about sessions, cancellation, missed sessions, refunds, teachers, and booking rules.",
+        "parameters": {
+            "question": "string - the user's policy-related question"
+        },
+        "output_format": "string containing relevant policy information",
+        "limitations": [
+            "Only answers from the provided policy text.",
+            "Does not access live databases.",
+            "Does not update or change any records."
+        ],
+        "safety_requirements": [
+            "Do not invent policies.",
+            "If the policy does not contain the answer, the final answer should refuse."
+        ],
+        "requires_approval": False,
+        "type": "read"
+    },
+
+    "general_answer": {
+        "name": "general_answer",
+        "description": "Answers general explanation questions that do not require external tools or private data.",
+        "parameters": {
+            "question": "string - the user's general question"
+        },
+        "output_format": "string containing a clear explanation",
+        "limitations": [
+            "Should not be used for policy, private data, live data, or actions.",
+            "Should not be used when a more specific tool is available."
+        ],
+        "safety_requirements": [
+            "Keep the answer general.",
+            "Do not claim access to external systems."
+        ],
+        "requires_approval": False,
+        "type": "read"
+    }
+}
+
+
+# ============================================================
+# 5. Format tool schemas for the LLM
+# ============================================================
+
+def format_tool_schemas(tools: dict) -> str:
+    formatted_tools = []
+
+    for tool_name, schema in tools.items():
+        formatted_tools.append(f"""
+Tool name:
+{schema["name"]}
+
+Description:
+{schema["description"]}
+
+Parameters:
+{schema["parameters"]}
+
+Output format:
+{schema["output_format"]}
+
+Limitations:
+{schema["limitations"]}
+
+Safety requirements:
+{schema["safety_requirements"]}
+
+Requires approval:
+{schema["requires_approval"]}
+
+Tool type:
+{schema["type"]}
+""")
+
+    return "\n\n".join(formatted_tools)
+
+
+available_tools_text = format_tool_schemas(TOOLS)
+
+
+# ============================================================
+# 6. Tool selection prompt
+# ============================================================
+
+tool_selector_prompt = ChatPromptTemplate.from_template("""
+You are an AI tool router.
+
+Your job is to select the best tool for the user request.
+
+Use the tool schemas below to decide.
+
+Available tool schemas:
+{available_tools}
+
+Return only valid JSON in this format:
+
+{{
+  "tool": "calculator | policy_search | general_answer",
+  "tool_input": "input to send to the selected tool",
+  "reason": "short reason"
+}}
+
+Rules:
+- Choose calculator only for arithmetic or numeric calculations.
+- Choose policy_search only for policy-related questions.
+- Choose general_answer only when no specific tool is needed.
+- Do not invent tool names.
+- The tool_input must match the selected tool parameter.
+
+User request:
+{question}
+""")
+
+json_parser = JsonOutputParser()
+
+tool_selector_chain = tool_selector_prompt | router_llm | json_parser
+
+
+# ============================================================
+# 7. Final answer prompt
+# ============================================================
+
+final_answer_prompt = ChatPromptTemplate.from_template("""
+You are a helpful assistant.
+
+Use the tool result to answer the user clearly.
+
+User Question:
+{question}
+
+Selected Tool:
+{tool}
+
+Tool Result:
+{tool_result}
+
+Final Answer:
+""")
+
+text_parser = StrOutputParser()
+
+final_answer_chain = final_answer_prompt | answer_llm | text_parser
+
+
+# ============================================================
+# 8. Validate selected tool
+# ============================================================
+
+def validate_tool_selection(tool_name: str) -> bool:
+    return tool_name in TOOLS
+
+
+# ============================================================
+# 9. Execute selected tool
+# ============================================================
+
+def execute_tool(tool_name: str, tool_input: str) -> str:
+    if not validate_tool_selection(tool_name):
+        return "Invalid tool selected."
+
+    if tool_name == "calculator":
+        return calculator(tool_input)
+
+    if tool_name == "policy_search":
+        return policy_search(tool_input)
+
+    if tool_name == "general_answer":
+        return general_answer(tool_input)
+
+    return "Unknown tool."
+
+
+# ============================================================
+# 10. Interactive loop
+# ============================================================
+
+print("\n--- Tool Calling Demo with Tool Schema ---")
+print("Ask a question.")
+print("Type 'exit' to quit.\n")
+
+while True:
+    user_input = input("User: ").strip()
+
+    if user_input.lower() == "exit":
+        print("Goodbye.")
+        break
+
+    decision = tool_selector_chain.invoke({
+        "question": user_input,
+        "available_tools": available_tools_text
+    })
+
+    selected_tool = decision["tool"]
+    tool_input = decision["tool_input"]
+    reason = decision["reason"]
+
+    print("\n=== Tool Decision ===")
+    print(f"Selected Tool: {selected_tool}")
+    print(f"Tool Input: {tool_input}")
+    print(f"Reason: {reason}")
+
+    selected_tool_schema = TOOLS.get(selected_tool)
+
+    print("\n=== Selected Tool Schema ===")
+    print(selected_tool_schema)
+
+    tool_result = execute_tool(selected_tool, tool_input)
+
+    print("\n=== Tool Result ===")
+    print(tool_result)
+
+    final_answer = final_answer_chain.invoke({
+        "question": user_input,
+        "tool": selected_tool,
+        "tool_result": tool_result
+    })
+
+    print("\n=== Final Answer ===")
+    print(final_answer)
+    print()
+

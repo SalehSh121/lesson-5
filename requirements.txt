@@ -39,3 +39,9 @@ langchain-google-genai
 
 # Sparse Retrieval
 rank_bm25
+
+# MCP (Model Context Protocol)
+mcp
+
+# GitHub Integration
+PyGithub
